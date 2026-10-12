@@ -25,6 +25,18 @@
   payloads, DST-aware March boundaries for Paris, and exact currency rounding.
 - The production frontend build completes successfully.
 
+Run the checks from the repository root:
+
+```bash
+PYTHONPATH=backend python -m unittest discover -s backend/tests -v
+npm --prefix frontend run build
+```
+
+For the strongest tenant-isolation demo, use `prop-001`, which intentionally exists
+for both companies. Sunset Properties should see `USD 2,250.00` from four March
+reservations (including the Paris-local March 1 boundary reservation), while Ocean
+Rentals should see `USD 0.00` and zero reservations for its distinct `prop-001`.
+
 ## Loom outline (5–10 minutes)
 
 1. Log in as Sunset Properties and Ocean Rentals and show each tenant's property list.
