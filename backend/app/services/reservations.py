@@ -1,8 +1,7 @@
-from datetime import datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Dict, Any, Tuple
+from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 from zoneinfo import ZoneInfo
-
 
 MONEY_QUANTUM = Decimal("0.01")
 
@@ -12,7 +11,9 @@ def round_currency(value: Decimal) -> Decimal:
     return value.quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP)
 
 
-def month_bounds_utc(year: int, month: int, timezone_name: str) -> Tuple[datetime, datetime]:
+def month_bounds_utc(
+    year: int, month: int, timezone_name: str
+) -> tuple[datetime, datetime]:
     """Return a property's local calendar-month bounds as UTC instants."""
     property_timezone = ZoneInfo(timezone_name)
     start_local = datetime(year, month, 1, tzinfo=property_timezone)
@@ -20,7 +21,7 @@ def month_bounds_utc(year: int, month: int, timezone_name: str) -> Tuple[datetim
         end_local = datetime(year + 1, 1, 1, tzinfo=property_timezone)
     else:
         end_local = datetime(year, month + 1, 1, tzinfo=property_timezone)
-    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+    return start_local.astimezone(UTC), end_local.astimezone(UTC)
 
 
 async def calculate_monthly_revenue(
@@ -38,10 +39,11 @@ async def calculate_monthly_revenue(
         raise ValueError("tenant_id is required for revenue queries")
 
     from sqlalchemy import text
-    from app.core.database_pool import db_pool
 
     owns_session = db_session is None
     if owns_session:
+        from app.core.database_pool import db_pool
+
         await db_pool.initialize()
         db_session = db_pool.get_session()
 
@@ -85,10 +87,14 @@ async def calculate_monthly_revenue(
         if owns_session:
             await db_session.close()
 
-async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str, Any]:
+
+async def calculate_total_revenue(property_id: str, tenant_id: str) -> dict[str, Any]:
     """
     Aggregates revenue from database.
     """
+    if not tenant_id:
+        raise ValueError("tenant_id is required for revenue queries")
+
     try:
         from app.core.database_pool import db_pool
 
@@ -98,7 +104,7 @@ async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str,
             async with db_pool.get_session() as session:
                 # Use SQLAlchemy text for raw SQL
                 from sqlalchemy import text
-                
+
                 query = text("""
                     SELECT 
                         property_id,
@@ -108,21 +114,20 @@ async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str,
                     WHERE property_id = :property_id AND tenant_id = :tenant_id
                     GROUP BY property_id
                 """)
-                
-                result = await session.execute(query, {
-                    "property_id": property_id, 
-                    "tenant_id": tenant_id
-                })
+
+                result = await session.execute(
+                    query, {"property_id": property_id, "tenant_id": tenant_id}
+                )
                 row = result.fetchone()
-                
+
                 if row:
                     total_revenue = round_currency(Decimal(str(row.total_revenue)))
                     return {
                         "property_id": property_id,
                         "tenant_id": tenant_id,
                         "total": f"{total_revenue:.2f}",
-                        "currency": "USD", 
-                        "count": row.reservation_count
+                        "currency": "USD",
+                        "count": row.reservation_count,
                     }
                 else:
                     # No reservations found for this property
@@ -131,11 +136,11 @@ async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str,
                         "tenant_id": tenant_id,
                         "total": "0.00",
                         "currency": "USD",
-                        "count": 0
+                        "count": 0,
                     }
         else:
-            raise Exception("Database pool not available")
-            
+            raise RuntimeError("Database pool not available")
+
     except Exception as e:
         # Never substitute another tenant's hard-coded financial figures when
         # the database is unavailable. Failing closed is safer than returning
